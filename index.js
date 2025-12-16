@@ -1,16 +1,13 @@
-const express = require ('express')
-const cors = require ('cors');
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const app = express ();
+const express = require("express");
+const cors = require("cors");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const app = express();
 const port = process.env.PORT || 3000;
-require ('dotenv').config()
+require("dotenv").config();
 
 // NextHire = NextHire_Admin pass= kCa0kpdCz031ibZP
 
-
 // Mongo_Connect
-
-
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@simple-crud-server.a0arf8b.mongodb.net/?appName=simple-crud-server`;
 
@@ -20,7 +17,7 @@ const client = new MongoClient(uri, {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
 });
 
 async function run() {
@@ -28,52 +25,63 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
-const jobsCollection = client.db("NextHire").collection('Jobs')
-const applicationCollection = client.db ("NextHire").collection('applications')
-//jobs api
+    const jobsCollection = client.db("NextHire").collection("Jobs");
+    const applicationCollection = client
+      .db("NextHire")
+      .collection("applications");
+    //jobs api
 
+    app.get("/Jobs", async (req, res) => {
+      const cursor = (await jobsCollection).find();
+      const result = await cursor.toArray();
+      res.send(result);
+    });
 
-app.get('/Jobs', async (req,res)=> {
-    const cursor = (await jobsCollection).find();
-    const result = await cursor.toArray();
-    res.send(result);
-});
+    app.get("/jobs/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await jobsCollection.findOne(query);
+      res.send(result);
+    });
 
+    // Job Application Related Api
 
-app.get ("/jobs/:id", async (req,res) =>
-{
-    const id = req.params.id;
-    const query = {_id: new ObjectId(id) }
-    const result = await jobsCollection.findOne(query);
-    res.send(result);
-});
+    //1. dashboared e joma hobe
+    app.get("/applications", async (req, res) => {
+      const email = req.query.email;
 
-// Job Application Related Api
+      const query = {
+        applicant: email,
+      };
 
+      const result = await applicationCollection.find(query).toArray();
 
-app.post ('/applications',async(req,res) =>
-{
-    const application = req.body;
-    const result = await applicationCollection.insertOne(application);
-    res.send;
-})
+      // Bad way to agregate data
 
+      for (const application of result) {
+        const jobId = application.jobId;
+        const jobQuery = { _id: new ObjectId(jobId) };
+        const job = await jobsCollection.findOne(jobQuery);
+        application.company = job.company;
+        application.title = job.title;
+        application.company_logo = job.company_logo;
+      }
 
+      res.send(result);
+    });
 
-
-
-
-
-
-
-
-
-
-
+    // 2. job application joma hobe
+    app.post("/applications", async (req, res) => {
+      const application = req.body;
+      const result = await applicationCollection.insertOne(application);
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
@@ -81,18 +89,15 @@ app.post ('/applications',async(req,res) =>
 }
 run().catch(console.dir);
 
-
-
 //middleweare
 
 app.use(cors());
 app.use(express.json());
 
-app.get ( '/', (req,res) => {
-    res.send('Next Hire on the verge!!')
-})
+app.get("/", (req, res) => {
+  res.send("Next Hire on the verge!!");
+});
 
-app.listen(port, ()=>{
-    console.log(`Next Hire running on port ${port}`)
-})
-
+app.listen(port, () => {
+  console.log(`Next Hire running on port ${port}`);
+});
