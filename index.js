@@ -5,13 +5,12 @@ const app = express();
 const port = process.env.PORT || 3000;
 require("dotenv").config();
 
-// NextHire = NextHire_Admin pass= kCa0kpdCz031ibZP
-
-// Mongo_Connect
+// 1. মিডলওয়্যারগুলো অবশ্যই রাউটের উপরে থাকতে হবে
+app.use(cors());
+app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@simple-crud-server.a0arf8b.mongodb.net/?appName=simple-crud-server`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -22,21 +21,25 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect(); // চাইলে কানেক্ট করতে পারেন
 
     const jobsCollection = client.db("NextHire").collection("Jobs");
-    const applicationCollection = client
-      .db("NextHire")
-      .collection("applications");
+    const applicationCollection = client.db("NextHire").collection("applications");
 
+    // --- Jobs API ---
 
+    // ১. এই রাউটেই আপনার সমস্যা ছিল
+    app.get("/jobs", async (req, res) => {
+      const email = req.query.email;
+      let query = {}; // 'query' অবজেক্টটি ডিফাইন করা হলো
 
+      if (email) {
+        // ফ্রন্টএন্ড থেকে পাঠানো hr_email এর সাথে ডাটাবেজের ফিল্ড মিলতে হবে
+        query.hr_email = email; 
+      }
 
-    //jobs api
-
-    app.get("/Jobs", async (req, res) => {
-      const cursor = (await jobsCollection).find();
+      // find() এর ভেতরে query পাঠাতে হবে
+      const cursor = jobsCollection.find(query); 
       const result = await cursor.toArray();
       res.send(result);
     });
@@ -52,70 +55,45 @@ async function run() {
       const newJob = req.body;
       const result = await jobsCollection.insertOne(newJob);
       res.send(result);
+    });
 
-    })
+    // --- Job Application Related Api ---
 
-    // Could be done
-
-    app.get('/jobsByEmailAddress', async(req,res) =>{
-      const email = req.query.email;
-       const query = {hr_email:email}
-    })
-
-    // Job Application Related Api
-
-
-
-    //1. dashboared e joma hobe
     app.get("/applications", async (req, res) => {
       const email = req.query.email;
-
-      const query = {
-        applicant: email,
-      };
-
+      const query = { applicant: email };
       const result = await applicationCollection.find(query).toArray();
-
-      // Bad way to agregate data
 
       for (const application of result) {
         const jobId = application.jobId;
         const jobQuery = { _id: new ObjectId(jobId) };
         const job = await jobsCollection.findOne(jobQuery);
-        application.company = job.company;
-        application.title = job.title;
-        application.company_logo = job.company_logo;
+        if (job) {
+          application.company = job.company;
+          application.title = job.jobTitle; // ফ্রন্টএন্ডে jobTitle ব্যবহার করেছেন
+          application.company_logo = job.company_logo;
+        }
       }
-
       res.send(result);
     });
 
-    // 2. job application joma hobe
     app.post("/applications", async (req, res) => {
       const application = req.body;
       const result = await applicationCollection.insertOne(application);
       res.send(result);
     });
 
-    // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    console.log("Connected to MongoDB!");
+
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
+    // client.close() করার দরকার নেই রান টাইম এ
   }
 }
 run().catch(console.dir);
 
-//middleweare
-
-app.use(cors());
-app.use(express.json());
-
 app.get("/", (req, res) => {
-  res.send("Next Hire on the verge!!");
+  res.send("Next Hire Server is Running!!");
 });
 
 app.listen(port, () => {
