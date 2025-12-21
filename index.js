@@ -1,9 +1,10 @@
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+require("dotenv").config();
+
 const app = express();
 const port = process.env.PORT || 3000;
-require("dotenv").config();
 
 // Middleware
 app.use(cors());
@@ -21,122 +22,86 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    const jobsCollection = client.db("NextHire").collection("Jobs");
-    const applicationCollection = client.db("NextHire").collection("applications");
+    const db = client.db("NextHire");
+    const jobsCollection = db.collection("Jobs");
+    const applicationCollection = db.collection("applications");
 
     // --- Jobs API ---
-    // সকল জব অথবা নির্দিষ্ট HR-এর পোস্ট করা জব পাওয়ার জন্য
+    
+    // ১. সকল জব অথবা নির্দিষ্ট HR-এর পোস্ট করা জব পাওয়ার জন্য (কাউন্টসহ)
     app.get("/jobs", async (req, res) => {
-      const email = req.query.email; //
-      let query = {};
-      if (email) {
-        query.hr_email = email; //
-      }
-      const result = await jobsCollection.find(query).toArray();
-
-      // প্রতিটি জবের জন্য ডাইনামিকভাবে অ্যাপ্লিকেশন কাউন্ট করা
-      for (const job of result) {
-        const countQuery = { jobId: job._id.toString() }; // ডাটাবেজে jobId স্ট্রিং হিসেবে থাকে
-        const applicationCount = await applicationCollection.countDocuments(countQuery);
-        job.applicationCount = applicationCount; //
-      }
-      res.send(result);
-    });
-
-    // new addition
-
-    app.get('/jobs/applications', async(req,res)=>{
       const email = req.query.email;
-      const query = {hr_email: email};
+      let query = email ? { hr_email: email } : {};
+
       const jobs = await jobsCollection.find(query).toArray();
 
-      // should use aggrigate to have optimum data fetching
-
-      for (const job of jobs){
-        const applicationQuery = {jobId: job._id.toString()}
-        const application_count = await applicationCollection.countDocuments (applicationQuery);
-        job.application_count = application_count;
+      // প্রতিটি জবের জন্য অ্যাপ্লিকেশন সংখ্যা যোগ করা
+      for (const job of jobs) {
+        const count = await applicationCollection.countDocuments({ 
+            jobId: job._id.toString() 
+        });
+        job.applicationCount = count;
       }
-      res.send (jobs);
-    })
+      res.send(jobs);
+    });
 
-    // নির্দিষ্ট একটি জবের ডিটেইলস দেখার জন্য
+    // ২. নির্দিষ্ট একটি জবের ডিটেইলস
     app.get("/jobs/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) }; //
+      const query = { _id: new ObjectId(req.params.id) };
       const result = await jobsCollection.findOne(query);
       res.send(result);
     });
 
-    // নতুন জব পোস্ট করার জন্য
+    // ৩. নতুন জব পোস্ট করা
     app.post('/jobs', async (req, res) => {
-      const newJob = req.body;
-      const result = await jobsCollection.insertOne(newJob); //
+      const result = await jobsCollection.insertOne(req.body);
       res.send(result);
     });
 
-    
 
+    // --- Application API ---
 
-    // --- Job Application Related Api ---
-
-    // ১. নির্দিষ্ট একটি জবে কতজন আবেদন করেছে তা দেখার জন্য (HR View)
-    app.get("/applications/job/:job_id", async (req, res) => {
-      try {
-        const job_id = req.params.job_id.trim(); // URL থেকে আসা আইডি
-        
-        // jobId ফিল্ডটি স্ট্রিং এবং ObjectId উভয় ফরম্যাটেই চেক করা নিরাপদ
-        const query = {
-          $or: [
-            { jobId: job_id },
-            { jobId: new ObjectId(job_id) }
-          ]
-        };
-        const result = await applicationCollection.find(query).toArray();
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: "Error fetching applications" });
-      }
+    // ৪. জবে আবেদন সাবমিট করা
+    app.post("/applications", async (req, res) => {
+      const result = await applicationCollection.insertOne(req.body);
+      res.send(result);
     });
 
-    // ২. একজন আবেদনকারী (Candidate) নিজে কোথায় কোথায় অ্যাপ্লাই করেছেন (My Applications)
-    app.get("/applications", async (req, res) => {
-      const email = req.query.email; //
-      const query = { applicant: email }; //
+    // ৫. নির্দিষ্ট জবের সকল আবেদন দেখা (HR-এর জন্য)
+    app.get("/applications/job/:job_id", async (req, res) => {
+      const jobId = req.params.job_id;
+      const query = {
+        $or: [{ jobId: jobId }, { jobId: new ObjectId(jobId) }]
+      };
       const result = await applicationCollection.find(query).toArray();
+      res.send(result);
+    });
 
-      // আবেদনের সাথে জবের তথ্য (Title, Company) যোগ করা
-      for (const application of result) {
-        const jobId = application.jobId;
-        const jobQuery = { _id: new ObjectId(jobId) };
-        const job = await jobsCollection.findOne(jobQuery);
+    // ৬. ইউজারের নিজের করা সকল আবেদন দেখা (Candidate-এর জন্য)
+    app.get("/applications", async (req, res) => {
+      const email = req.query.email;
+      if (!email) return res.status(400).send({ message: "Email required" });
+
+      const applications = await applicationCollection.find({ applicant: email }).toArray();
+
+      // আবেদনের সাথে জবের প্রয়োজনীয় তথ্য যোগ করা
+      for (const appTask of applications) {
+        const job = await jobsCollection.findOne({ _id: new ObjectId(appTask.jobId) });
         if (job) {
-          application.company = job.company; //
-          application.title = job.title || job.jobTitle; //
-          application.company_logo = job.company_logo; //
+          appTask.company = job.company;
+          appTask.title = job.title || job.jobTitle;
+          appTask.company_logo = job.company_logo;
         }
       }
-      res.send(result);
+      res.send(applications);
     });
 
-    // ৩. জবে আবেদন সাবমিট করার জন্য
-    app.post("/applications", async (req, res) => {
-      const application = req.body;
-      const result = await applicationCollection.insertOne(application); //
-      res.send(result);
-    });
-
-    console.log("Connected to MongoDB!");
+    console.log("Successfully connected to MongoDB!");
   } catch (error) {
-    console.error(error);
+    console.error("Connection error:", error);
   }
 }
 run().catch(console.dir);
 
-app.get("/", (req, res) => {
-  res.send("Next Hire Server is Running!!");
-});
-
-app.listen(port, () => {
-  console.log(`Next Hire running on port ${port}`);
-});
+app.get("/", (req, res) => res.send("Next Hire Server is Running!!"));
+app.listen(port, () => console.log(`Next Hire running on port ${port}`));
