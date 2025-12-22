@@ -8,7 +8,12 @@ require("dotenv").config();
 
 
 // Middleware
-app.use(cors());
+app.use(cors(
+  {
+    origin: ['http://localhost:5173/'],
+    credentials: true
+  }
+));
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@simple-crud-server.a0arf8b.mongodb.net/?appName=simple-crud-server`;
@@ -35,7 +40,7 @@ async function run() {
 app.post('/jwt', async (req,res)=>{
   const {email} = req.body;
   const user = {email}
-  const token = jwt.sign(user, 'secret', {expiresIn: '1h'});
+  const token = jwt.sign(user, process.env.JWT_ACCCESS_SECRET, {expiresIn: '1h'});
   res.send ({token})
 })
 
