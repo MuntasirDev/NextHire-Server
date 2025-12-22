@@ -3,17 +3,16 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
-const jwt = require("jsonwebtoken")
+const jwt = require("jsonwebtoken");
+const cookieParser = require('cookie-parser');
 require("dotenv").config();
 
 
 // Middleware
-app.use(cors(
-  {
-    origin: ['http://localhost:5173/'],
-    credentials: true
-  }
-));
+app.use(cors({
+  origin: ['http://localhost:5173/'], 
+  credentials: true,
+}));
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@simple-crud-server.a0arf8b.mongodb.net/?appName=simple-crud-server`;
@@ -34,15 +33,23 @@ async function run() {
 
 
 
-  //  Using JWT related APIS
+  //  Using JWT related API'S
+
+  app.post('/jwt', async(req,res)=>{
+    const userData = req.body;
+    const token = jwt.sign(userData, process.env.JWT_ACCCESS_SECRET, {expiresIn: 'id'})
+    
+    // set token in the the cookies
+    
+ res.cookie('token', token, {
+  httpOnly: true,
+  secure: false 
+ })
+    
+    res.send({success: true})
+  })
 
 
-app.post('/jwt', async (req,res)=>{
-  const {email} = req.body;
-  const user = {email}
-  const token = jwt.sign(user, process.env.JWT_ACCCESS_SECRET, {expiresIn: '1h'});
-  res.send ({token})
-})
 
 
 
@@ -83,13 +90,13 @@ app.post('/jwt', async (req,res)=>{
 
     // --- Application API ---
 
-    // ৪. জবে আবেদন সাবমিট করা
+    // 4. apllication in job
     app.post("/applications", async (req, res) => {
       const result = await applicationCollection.insertOne(req.body);
       res.send(result);
     });
 
-    // ৫. নির্দিষ্ট জবের সকল আবেদন দেখা (HR-এর জন্য)
+    // 5. to see desired jobs total application
     app.get("/applications/job/:job_id", async (req, res) => {
       const jobId = req.params.job_id;
       const query = {
@@ -99,14 +106,14 @@ app.post('/jwt', async (req,res)=>{
       res.send(result);
     });
 
-    // ৬. ইউজারের নিজের করা সকল আবেদন দেখা (Candidate-এর জন্য)
+    // 7. user can see his total apllicated jobs lis 
     app.get("/applications", async (req, res) => {
       const email = req.query.email;
       if (!email) return res.status(400).send({ message: "Email required" });
 
       const applications = await applicationCollection.find({ applicant: email }).toArray();
 
-      // আবেদনের সাথে জবের প্রয়োজনীয় তথ্য যোগ করা
+      // 8. adding other info with job apllication
       for (const appTask of applications) {
         const job = await jobsCollection.findOne({ _id: new ObjectId(appTask.jobId) });
         if (job) {
