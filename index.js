@@ -1,10 +1,11 @@
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-require("dotenv").config();
-
 const app = express();
 const port = process.env.PORT || 3000;
+const jwt = require("jsonwebtoken")
+require("dotenv").config();
+
 
 // Middleware
 app.use(cors());
@@ -25,6 +26,22 @@ async function run() {
     const db = client.db("NextHire");
     const jobsCollection = db.collection("Jobs");
     const applicationCollection = db.collection("applications");
+
+
+
+  //  Using JWT related APIS
+
+
+app.post('/jwt', async (req,res)=>{
+  const {email} = req.body;
+  const user = {email}
+  const token = jwt.sign(user, 'secret', {expiresIn: '1h'});
+  res.send ({token})
+})
+
+
+
+
 
     // --- Jobs API ---
     
