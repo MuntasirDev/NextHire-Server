@@ -13,6 +13,7 @@ app.use(cors({
     origin: [
         'http://localhost:5173',
         'https://nexthire-38482.web.app'
+        
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
