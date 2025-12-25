@@ -8,7 +8,13 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- 1. Middleware Configuration ---
+// --- ১. Logger Middleware ---
+const logger = (req, res, next) => {
+    console.log('Log Info:', req.method, req.url);
+    next();
+};
+
+// --- ২. Middleware Configuration ---
 app.use(cors({
     origin: [
         'http://localhost:5173',
@@ -19,8 +25,9 @@ app.use(cors({
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(logger);
 
-// --- ২. ম্যানুয়াল প্রি-ফ্লাইট হ্যান্ডলার (এটি ৪০১ এরর এবং ক্রাশ ঠেকাবে) ---
+// --- ৩.
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Credentials', true);
     if (req.method === 'OPTIONS') {
@@ -41,14 +48,14 @@ async function dbConnect() {
         const db = client.db("NextHire");
         jobsCollection = db.collection("Jobs");
         applicationCollection = db.collection("applications");
-        console.log("Connected to MongoDB");
+        console.log("Connected to MongoDB Successfully!");
     } catch (error) {
         console.error("DB Connection Error:", error);
     }
 }
 dbConnect();
 
-// --- ৩. তোর অরিজিনাল verifyToken (যা আগে ছিল) ---
+// --- ৪. verifyToken ---
 const verifyToken = (req, res, next) => {
     const token = req?.cookies?.token;
     if (!token) return res.status(401).send({ message: 'Unauthorized access' });
@@ -60,21 +67,23 @@ const verifyToken = (req, res, next) => {
     });
 }
 
-// --- API Routes ---
+// --- ৫. API Routes ---
+
 app.get("/", (req, res) => res.send("Next Hire Server is Running!!"));
 
+// JWT Generation
 app.post('/jwt', async (req, res) => {
     const user = req.body;
     const token = jwt.sign(user, process.env.JWT_ACCCESS_SECRET, { expiresIn: '7d' });
     res.cookie('token', token, {
         httpOnly: true,
         secure: true, 
-        sameSite: 'none',
-        partitioned: true
+        sameSite: 'none'
     })
     .send({ success: true });
 });
 
+// Logout
 app.post('/logout', (req, res) => {
     res.clearCookie('token', { 
         maxAge: 0, 
@@ -83,6 +92,7 @@ app.post('/logout', (req, res) => {
     }).send({ success: true });
 });
 
+// Jobs Routes
 app.get("/jobs", async (req, res) => {
     const email = req.query.email;
     let query = email ? { hr_email: email } : {};
@@ -109,12 +119,19 @@ app.get("/applications", verifyToken, async (req, res) => {
     res.send(result);
 });
 
+app.get("/applications/job/:job_id", verifyToken, async (req, res) => {
+    const jobId = req.params.job_id;
+    const query = { job_id: jobId }; 
+    const result = await applicationCollection.find(query).toArray();
+    res.send(result);
+});
+
 app.post("/applications", async (req, res) => {
     const result = await applicationCollection.insertOne(req.body);
     res.send(result);
 });
 
-// এরর হ্যান্ডলিং মিডলওয়্যার
+// Error Handling
 app.use((err, req, res, next) => {
     res.status(500).send({ error: err.message });
 });
